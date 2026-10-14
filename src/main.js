@@ -152,7 +152,7 @@ async function init() {
     diagrams = createDiagrams(viewer.scene, model, config);
     animation = createTimeline(() => { if (animation) updateUI(); });
     animation.timeline.eventCallback('onComplete', () => { if (looping) { animation.timeline.restart(); } else { animation.timeline.pause(); updateUI(); } });
-    seek(steps[2].preview); $('#loading').remove();
+    seek(steps[0].start); $('#loading').remove();
     on($('#play'), 'click', togglePlay);
     on($('#music'), 'click', async () => {
       $('#music').disabled = true;
@@ -186,7 +186,7 @@ async function init() {
     on(document, 'visibilitychange', () => {
       music.setHidden(document.hidden).catch(() => { toast('BGMを再開できませんでした。BGMボタンで再生し直してください。'); });
       if (document.hidden) { hiddenWasPlaying = !animation.timeline.paused(); animation.timeline.pause(); cancelAnimationFrame(raf); }
-      else { if (hiddenWasPlaying) animation.timeline.play(); render(); } updateUI();
+      else { if (hiddenWasPlaying) animation.timeline.play(); cancelAnimationFrame(raf); render(); } updateUI();
     });
     on(host, 'viewererror', (e) => { animation.timeline.pause(); toast(e.detail); updateUI(); });
     let lastRenderKey = '', lastShadowKey = '';
@@ -202,6 +202,9 @@ async function init() {
       lastRenderKey = renderKey; raf = requestAnimationFrame(render);
     }
     render();
+    if (document.hidden) hiddenWasPlaying = true;
+    else animation.timeline.play();
+    updateUI();
   } catch (error) {
     console.error(error);
     $('#loading').innerHTML = `<span class="loading-mark">間</span><p>模型を表示できませんでした。<br>WebGL対応ブラウザとモデルの設定をご確認ください。</p><p id="load-detail"></p>`;
