@@ -27,5 +27,6 @@ export function applyBuildingState(model, state, config, diagrams = true) {
   model.roof.position.y = b.floorCount * b.floorHeight + b.floorCount * b.explodedGap * state.explode;
   model.roof.visible = state.roof > 0.01;
   model.roofMaterials.forEach((m) => { m.opacity = state.roof; });
-  model.zones.forEach((mesh) => { mesh.visible = diagrams && state.zone > 0.001; for (const m of [mesh.material].flat()) m.opacity = state.zone; });
+  const zoneOpacity = state.zone * (1 - config.circulation.zoneDimming * state.flow);
+  model.zones.forEach((mesh) => { mesh.visible = diagrams && state.zone > 0.001; for (const m of [mesh.material].flat()) m.opacity = zoneOpacity; });
 }

@@ -7,6 +7,7 @@ import { createDiagrams } from './scene/diagrams.js';
 import { createTimeline, applyBuildingState } from './animation/timeline.js';
 import { createLayout } from './ui/layout.js';
 import { icon } from './ui/icons.js';
+import { createAmbientMusic } from './audio/ambient.js';
 
 createLayout();
 const $ = (selector) => document.querySelector(selector);
@@ -14,6 +15,12 @@ const abort = new AbortController();
 const on = (element, event, listener) => element.addEventListener(event, listener, { signal: abort.signal });
 const host = $('#viewer');
 let viewer, model, diagrams, animation, raf, toastTimeout;
+const music = createAmbientMusic(config.audio, ({ enabled, playing, volume }) => {
+  const button = $('#music'); button.setAttribute('aria-pressed', String(enabled)); button.setAttribute('aria-label', enabled ? 'BGMを停止' : 'BGMを再生');
+  button.classList.toggle('playing', playing && volume > 0);
+  $('#music-state').textContent = enabled ? 'BGM ON' : 'BGM OFF';
+  $('#music-volume-value').textContent = `${Math.round(volume * 100)}%`;
+});
 let diagramVisible = true, looping = false, hiddenWasPlaying = false, isScrubbing = false, scrubWasPlaying = false;
 let lastUIKey = '';
 const timecode = (time) => `00:${Math.floor(time).toString().padStart(2, '0')}`;
@@ -147,6 +154,12 @@ async function init() {
     animation.timeline.eventCallback('onComplete', () => { if (looping) { animation.timeline.restart(); } else { animation.timeline.pause(); updateUI(); } });
     seek(steps[2].preview); $('#loading').remove();
     on($('#play'), 'click', togglePlay);
+    on($('#music'), 'click', async () => {
+      $('#music').disabled = true;
+      try { await music.toggle(); } catch (error) { console.error(error); toast('BGMを再生できませんでした。ブラウザの音声設定をご確認ください。'); }
+      finally { $('#music').disabled = false; }
+    });
+    on($('#music-volume'), 'input', (e) => music.setVolume(Number(e.target.value) / 100));
     on($('#restart'), 'click', () => { animation.seek(0); animation.timeline.play(); updateUI(); });
     on($('#speed'), 'change', (e) => animation.timeline.timeScale(Number(e.target.value)));
     document.querySelectorAll('[data-step]').forEach((el) => on(el, 'click', () => seek(steps.find((s) => s.id === el.dataset.step).preview)));
@@ -171,6 +184,7 @@ async function init() {
       if (key === 'arrowright' || key === 'arrowleft') { e.preventDefault(); seek(animation.timeline.time() + (key === 'arrowright' ? 1 : -1)); }
     });
     on(document, 'visibilitychange', () => {
+      music.setHidden(document.hidden).catch(() => { toast('BGMを再開できませんでした。BGMボタンで再生し直してください。'); });
       if (document.hidden) { hiddenWasPlaying = !animation.timeline.paused(); animation.timeline.pause(); cancelAnimationFrame(raf); }
       else { if (hiddenWasPlaying) animation.timeline.play(); render(); } updateUI();
     });
@@ -179,6 +193,7 @@ async function init() {
     function render() {
       applyBuildingState(model, animation.state, config, diagramVisible);
       diagrams.update(animation.state, animation.timeline.time(), diagramVisible);
+      $('#flow-key').hidden = !diagramVisible || animation.state.flow < 0.05;
       const state = animation.state;
       const shadowKey = `${state.rise}:${state.explode}:${state.roof}`;
       if (shadowKey !== lastShadowKey) { viewer.renderer.shadowMap.needsUpdate = true; lastShadowKey = shadowKey; }
@@ -195,5 +210,7 @@ async function init() {
   }
 }
 init();
+on(window, 'pagehide', (event) => { if (event.persisted) music.setHidden(true).catch(() => {}); else music.dispose(); });
+on(window, 'pageshow', (event) => { if (event.persisted) music.setHidden(document.hidden).catch(() => {}); });
 
-if (import.meta.hot) import.meta.hot.dispose(() => { abort.abort(); cancelAnimationFrame(raf); clearTimeout(toastTimeout); animation?.dispose(); diagrams?.dispose(); model?.dispose(); viewer?.dispose(); });
+if (import.meta.hot) import.meta.hot.dispose(() => { abort.abort(); music.dispose(); cancelAnimationFrame(raf); clearTimeout(toastTimeout); animation?.dispose(); diagrams?.dispose(); model?.dispose(); viewer?.dispose(); });
